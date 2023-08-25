@@ -1,44 +1,82 @@
-#include "shell.h"
-
+#include "main.h"
 /**
- * main - entry point
- * @ac: arg count
- * @av: arg vector
- *
- * Return: 0 on success, 1 on error
+ * exec_section - implements a simple shell
+ * @cmd: pointer to a struct
+ * @av: program arguments
+ * @num: tracks line number where error occurs
+ * Return: Nothing
  */
-int main(int ac, char **av)
+int  exec_section(input_t *cmd, char **av, int num)
 {
-	info_t info[] = { INFO_INIT };
-	int fd = 2;
+	pid_t pid1;
+	int i;
 
-	asm ("mov %1, %0\n\t"
-		"add $3, %0"
-		: "=r" (fd)
-		: "r" (fd));
-
-	if (ac == 2)
+	if (cmd->path[0] != '/')
+		return (127);
+	pid1 = fork();
+	if (pid1 < 0)
 	{
-		fd = open(av[1], O_RDONLY);
-		if (fd == -1)
-		{
-			if (errno == EACCES)
-				exit(126);
-			if (errno == ENOENT)
-			{
-				_eputs(av[0]);
-				_eputs(": 0: Can't open ");
-				_eputs(av[1]);
-				_eputchar('\n');
-				_eputchar(BUF_FLUSH);
-				exit(127);
-			}
-			return (EXIT_FAILURE);
-		}
-		info->readfd = fd;
+		perror("fork");
+		return (2);
 	}
-	populate_env_list(info);
-	read_history(info);
-	hsh(info, av);
+	if (pid1 > 0)
+		wait(NULL);
+	if (pid1 == 0)
+	{
+		if (execve(cmd->path, cmd->argv, cmd->envp) == -1)
+		{
+			write(2, av[0], _strlen(av[0]));
+			write(2, ": ", 2);
+			write(2, to_strn(num), (_strlen(to_strn(num))));
+			write(2, ": ", 2);
+			for (i = 0; cmd->argv[i] != NULL; i++)
+			{
+				write(2, cmd->argv[i], _strlen(cmd->argv[i]));
+				write(2, " ", 1);
+			}
+			write(2, ": not found\n", _strlen(": not found\n"));
+			return (2);
+		}
+	}
+	return (0);
+}
+/**
+ * main - implements a simple shell
+ * @ac: argument count
+ * @av: arguments array
+ * @envp: environment variables
+ * Return: EXIT_SUCCESS
+ */
+int main(int ac, char **av, char **envp)
+{
+	input_t *cmd;
+	int prompt_no = 1;
+
+	(void)ac;
+	(void)av;
+
+	while (1)
+	{
+		cmd = get_input(envp);
+		if (cmd == NULL)
+			continue;
+		_exiting(cmd);
+		if (_strncmp(cmd->argv[0], "env", 3) == 0)
+			_env(cmd, envp);
+		else if (_strncmp(cmd->argv[0], "cd", 2) == 0)
+		{
+			_chdir(cmd);
+		}
+		else
+			exec_section(cmd, av, prompt_no);
+
+		/*free(args);*/
+		free_struct(cmd);
+		if (cmd->pathFlag == 0)
+			free(cmd->path);
+		free(cmd);
+		prompt_no++;
+	}
+
 	return (EXIT_SUCCESS);
 }
